@@ -13,8 +13,6 @@ module Homebrew
   # The {Livecheck} module consists of methods used by the `brew livecheck`
   # command. These methods print the requested livecheck information
   # for formulae.
-  #
-  # @api private
   module Livecheck
     module_function
 
@@ -202,7 +200,6 @@ module Homebrew
       has_a_newer_upstream_version = T.let(false, T::Boolean)
 
       formulae_and_casks_total = formulae_and_casks_to_check.count
-
       if json && !quiet && $stderr.tty?
         Tty.with($stderr) do |stderr|
           stderr.puts Formatter.headline("Running checks", color: :blue)
@@ -218,7 +215,7 @@ module Homebrew
         )
       end
 
-      # If only one formula/cask is being checked, we enable extract-plist
+      # Allow ExtractPlist strategy if only one formula/cask is being checked.
       extract_plist = true if formulae_and_casks_total == 1
 
       formulae_checked = formulae_and_casks_to_check.map.with_index do |formula_or_cask, i|
@@ -241,29 +238,23 @@ module Homebrew
           puts
         end
 
-        if cask && !extract_plist && formula_or_cask.livecheck.strategy == :extract_plist
-          skip_info = {
-            cask:     cask.token,
-            status:   "skipped",
-            messages: ["Livecheck skipped due to the ExtractPlist strategy"],
-            meta:     { livecheckable: true },
-          }
-
-          SkipConditions.print_skip_information(skip_info) if !newer_only && !quiet
-          next
-        end
-
         # Check skip conditions for a referenced formula/cask
         if referenced_formula_or_cask
           skip_info = SkipConditions.referenced_skip_information(
             referenced_formula_or_cask,
             name,
-            full_name: use_full_name,
+            full_name:     use_full_name,
             verbose:,
+            extract_plist:,
           )
         end
 
-        skip_info ||= SkipConditions.skip_information(formula_or_cask, full_name: use_full_name, verbose:)
+        skip_info ||= SkipConditions.skip_information(
+          formula_or_cask,
+          full_name:     use_full_name,
+          verbose:,
+          extract_plist:,
+        )
         if skip_info.present?
           next skip_info if json && !newer_only
 
@@ -771,11 +762,8 @@ module Homebrew
         # in the strategy's `#find_versions` method once we figure out why
         # `strategy.method(:find_versions).parameters` isn't working as
         # expected.
-        if strategy_name == "ExtractPlist"
-          strategy_args[:cask] = cask if cask.present?
-        else
-          strategy_args[:url] = url
-        end
+        strategy_args[:cask] = cask if strategy_name == "ExtractPlist" && cask.present?
+        strategy_args[:url] = url
         strategy_args.compact!
 
         strategy_data = strategy.find_versions(**strategy_args, &livecheck_strategy_block)

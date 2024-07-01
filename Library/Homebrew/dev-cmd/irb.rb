@@ -4,24 +4,27 @@
 require "abstract_command"
 require "formulary"
 require "cask/cask_loader"
-require "cli/parser"
 
 class String
+  # @!visibility private
   def f(*args)
     require "formula"
     Formulary.factory(self, *args)
   end
 
+  # @!visibility private
   def c(config: nil)
     Cask::CaskLoader.load(self, config:)
   end
 end
 
 class Symbol
+  # @!visibility private
   def f(*args)
     to_s.f(*args)
   end
 
+  # @!visibility private
   def c(config: nil)
     to_s.c(config:)
   end
@@ -77,7 +80,6 @@ module Homebrew
         if args.pry?
           Pry.config.should_load_rc = false # skip loading .pryrc
           Pry.config.history_file = "#{Dir.home}/.brew_pry_history"
-          Pry.config.memory_size = 100 # max lines to save to history file
           Pry.config.prompt_name = "brew"
 
           Pry.start

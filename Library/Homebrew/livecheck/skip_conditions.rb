@@ -5,8 +5,6 @@ module Homebrew
   module Livecheck
     # The `Livecheck::SkipConditions` module primarily contains methods that
     # check for various formula/cask/resource conditions where a check should be skipped.
-    #
-    # @api private
     module SkipConditions
       module_function
 
@@ -117,20 +115,6 @@ module Homebrew
           verbose:       T::Boolean,
         ).returns(Hash)
       }
-      def cask_discontinued(cask, livecheckable, full_name: false, verbose: false)
-        return {} if !cask.discontinued? || livecheckable
-
-        Livecheck.status_hash(cask, "discontinued", full_name:, verbose:)
-      end
-
-      sig {
-        params(
-          cask:          Cask::Cask,
-          livecheckable: T::Boolean,
-          full_name:     T::Boolean,
-          verbose:       T::Boolean,
-        ).returns(Hash)
-      }
       def cask_deprecated(cask, livecheckable, full_name: false, verbose: false)
         return {} if !cask.deprecated? || livecheckable
 
@@ -149,6 +133,27 @@ module Homebrew
         return {} if !cask.disabled? || livecheckable
 
         Livecheck.status_hash(cask, "disabled", full_name:, verbose:)
+      end
+
+      sig {
+        params(
+          cask:           Cask::Cask,
+          _livecheckable: T::Boolean,
+          full_name:      T::Boolean,
+          verbose:        T::Boolean,
+          extract_plist:  T::Boolean,
+        ).returns(Hash)
+      }
+      def cask_extract_plist(cask, _livecheckable, full_name: false, verbose: false, extract_plist: false)
+        return {} if extract_plist || cask.livecheck.strategy != :extract_plist
+
+        Livecheck.status_hash(
+          cask,
+          "skipped",
+          ["Use `--extract-plist` to enable checking multiple casks with ExtractPlist strategy"],
+          full_name:,
+          verbose:,
+        )
       end
 
       sig {
@@ -191,9 +196,9 @@ module Homebrew
       # Skip conditions for casks.
       CASK_CHECKS = [
         :package_or_resource_skip,
-        :cask_discontinued,
         :cask_deprecated,
         :cask_disabled,
+        :cask_extract_plist,
         :cask_version_latest,
         :cask_url_unversioned,
       ].freeze
@@ -211,9 +216,10 @@ module Homebrew
           package_or_resource: T.any(Formula, Cask::Cask, Resource),
           full_name:           T::Boolean,
           verbose:             T::Boolean,
+          extract_plist:       T::Boolean,
         ).returns(Hash)
       }
-      def skip_information(package_or_resource, full_name: false, verbose: false)
+      def skip_information(package_or_resource, full_name: false, verbose: false, extract_plist: true)
         livecheckable = package_or_resource.livecheckable?
 
         checks = case package_or_resource
@@ -224,10 +230,14 @@ module Homebrew
         when Resource
           RESOURCE_CHECKS
         end
-        return {} unless checks
 
         checks.each do |method_name|
-          skip_hash = send(method_name, package_or_resource, livecheckable, full_name:, verbose:)
+          skip_hash = case method_name
+          when :cask_extract_plist
+            send(method_name, package_or_resource, livecheckable, full_name:, verbose:, extract_plist:)
+          else
+            send(method_name, package_or_resource, livecheckable, full_name:, verbose:)
+          end
           return skip_hash if skip_hash.present?
         end
 
@@ -244,18 +254,21 @@ module Homebrew
           original_package_or_resource_name: String,
           full_name:                         T::Boolean,
           verbose:                           T::Boolean,
+          extract_plist:                     T::Boolean,
         ).returns(T.nilable(Hash))
       }
       def referenced_skip_information(
         livecheck_package_or_resource,
         original_package_or_resource_name,
         full_name: false,
-        verbose: false
+        verbose: false,
+        extract_plist: true
       )
         skip_info = SkipConditions.skip_information(
           livecheck_package_or_resource,
           full_name:,
           verbose:,
+          extract_plist:,
         )
         return if skip_info.blank?
 

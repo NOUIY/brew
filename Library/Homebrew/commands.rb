@@ -4,8 +4,6 @@
 require "completions"
 
 # Helper functions for commands.
-#
-# @api private
 module Commands
   HOMEBREW_CMD_PATH = (HOMEBREW_LIBRARY_PATH/"cmd").freeze
   HOMEBREW_DEV_CMD_PATH = (HOMEBREW_LIBRARY_PATH/"dev-cmd").freeze
@@ -135,13 +133,13 @@ module Commands
 
   def self.find_internal_commands(path)
     find_commands(path).map(&:basename)
-                       .map(&method(:basename_without_extension))
+                       .map { basename_without_extension(_1) }
   end
 
   def self.external_commands
     Tap.cmd_directories.flat_map do |path|
       find_commands(path).select(&:executable?)
-                         .map(&method(:basename_without_extension))
+                         .map { basename_without_extension(_1) }
                          .map { |p| p.to_s.delete_prefix("brew-").strip }
     end.map(&:to_s)
        .sort
@@ -177,7 +175,10 @@ module Commands
     external_commands_file.atomic_write("#{external_commands.sort.join("\n")}\n")
   end
 
+  sig { params(command: String).returns(T.nilable(T::Array[[String, String]])) }
   def self.command_options(command)
+    return if command == "help"
+
     path = self.path(command)
     return if path.blank?
 
@@ -207,7 +208,7 @@ module Commands
 
     if (cmd_parser = Homebrew::CLI::Parser.from_cmd_path(path))
       if short
-        cmd_parser.description.split(DESCRIPTION_SPLITTING_PATTERN).first
+        cmd_parser.description&.split(DESCRIPTION_SPLITTING_PATTERN)&.first
       else
         cmd_parser.description
       end

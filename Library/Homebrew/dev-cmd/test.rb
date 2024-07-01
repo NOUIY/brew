@@ -5,7 +5,6 @@ require "abstract_command"
 require "extend/ENV"
 require "sandbox"
 require "timeout"
-require "cli/parser"
 
 module Homebrew
   module DevCmd
@@ -81,7 +80,7 @@ module Homebrew
 
             exec_args << "--HEAD" if f.head?
 
-            Utils.safe_fork do
+            Utils.safe_fork do |error_pipe|
               if Sandbox.available?
                 sandbox = Sandbox.new
                 f.logs.mkpath
@@ -93,13 +92,14 @@ module Homebrew
                 sandbox.allow_write_path(HOMEBREW_PREFIX/"var/homebrew/locks")
                 sandbox.allow_write_path(HOMEBREW_PREFIX/"var/log")
                 sandbox.allow_write_path(HOMEBREW_PREFIX/"var/run")
+                sandbox.deny_all_network_except_pipe(error_pipe) unless f.class.network_access_allowed?(:test)
                 sandbox.exec(*exec_args)
               else
                 exec(*exec_args)
               end
             end
           rescue Exception => e # rubocop:disable Lint/RescueException
-            retry if retry_test?(f, args:)
+            retry if retry_test?(f)
             ofail "#{f.full_name}: failed"
             $stderr.puts e, Utils::Backtrace.clean(e)
           ensure
@@ -110,7 +110,7 @@ module Homebrew
 
       private
 
-      def retry_test?(formula, args:)
+      def retry_test?(formula)
         @test_failed ||= Set.new
         if args.retry? && @test_failed.add?(formula)
           oh1 "Testing #{formula.full_name} (again)"

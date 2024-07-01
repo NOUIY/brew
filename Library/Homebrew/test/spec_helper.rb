@@ -29,7 +29,6 @@ require "rspec/retry"
 require "rspec/sorbet"
 require "rubocop/rspec/support"
 require "find"
-require "byebug"
 require "timeout"
 
 $LOAD_PATH.unshift(File.expand_path("#{ENV.fetch("HOMEBREW_LIBRARY")}/Homebrew/test/support/lib"))
@@ -38,13 +37,14 @@ require_relative "support/extend/cachable"
 
 require_relative "../global"
 
+require "debug" if ENV["HOMEBREW_DEBUG"]
+
 require "test/support/quiet_progress_formatter"
 require "test/support/helper/cask"
 require "test/support/helper/files"
 require "test/support/helper/fixtures"
 require "test/support/helper/formula"
 require "test/support/helper/mktmpdir"
-require "test/support/helper/output_as_tty"
 
 require "test/support/helper/spec/shared_context/homebrew_cask" if OS.mac?
 require "test/support/helper/spec/shared_context/integration_test"
@@ -102,7 +102,7 @@ RSpec.configure do |config|
   end
   config.mock_with :rspec do |mocks|
     # Prevents you from mocking or stubbing a method that does not exist on
-    # a real object. This is generally recommended, and will default to
+    # a real object. This is generally recommended and will default to
     # `true` in RSpec 4.
     mocks.verify_partial_doubles = true
   end
@@ -129,17 +129,12 @@ RSpec.configure do |config|
   # Never truncate output objects.
   RSpec::Support::ObjectFormatter.default_instance.max_formatted_output_length = nil
 
-  config.include(FileUtils)
-
-  config.include(Context)
-
   config.include(RuboCop::RSpec::ExpectOffense)
 
   config.include(Test::Helper::Cask)
   config.include(Test::Helper::Fixtures)
   config.include(Test::Helper::Formula)
   config.include(Test::Helper::MkTmpDir)
-  config.include(Test::Helper::OutputAsTTY)
 
   config.before(:each, :needs_linux) do
     skip "Not running on Linux." unless OS.linux?
@@ -163,6 +158,11 @@ RSpec.configure do |config|
 
   config.before(:each, :needs_network) do
     skip "Requires network connection." unless ENV["HOMEBREW_TEST_ONLINE"]
+  end
+
+  config.before(:each, :needs_homebrew_core) do
+    core_tap_path = "#{ENV.fetch("HOMEBREW_LIBRARY")}/Taps/homebrew/homebrew-core"
+    skip "Requires homebrew/core to be tapped." unless Dir.exist?(core_tap_path)
   end
 
   config.before do |example|
@@ -236,14 +236,14 @@ RSpec.configure do |config|
     @__stdin = $stdin.clone
 
     begin
-      if !example.metadata.keys.intersect?([:focus, :byebug]) && !ENV.key?("HOMEBREW_VERBOSE_TESTS")
+      if example.metadata.keys.exclude?(:focus) && !ENV.key?("HOMEBREW_VERBOSE_TESTS")
         $stdout.reopen(File::NULL)
         $stderr.reopen(File::NULL)
+        $stdin.reopen(File::NULL)
       else
-        # don't retry when focusing/debugging
+        # don't retry when focusing
         config.default_retry_count = 0
       end
-      $stdin.reopen(File::NULL)
 
       begin
         timeout = example.metadata.fetch(:timeout, 60)
@@ -310,16 +310,6 @@ end
 
 RSpec::Matchers.define_negated_matcher :not_to_output, :output
 RSpec::Matchers.alias_matcher :have_failed, :be_failed
-RSpec::Matchers.alias_matcher :a_string_containing, :include
-
-RSpec::Matchers.define :a_json_string do
-  match do |actual|
-    JSON.parse(actual)
-    true
-  rescue JSON::ParserError
-    false
-  end
-end
 
 # Match consecutive elements in an array.
 RSpec::Matchers.define :array_including_cons do |*cons|

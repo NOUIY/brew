@@ -2,7 +2,6 @@
 # frozen_string_literal: true
 
 require "abstract_command"
-require "cli/parser"
 require "formula"
 require "github_packages"
 require "github_releases"
@@ -45,9 +44,10 @@ module Homebrew
       def run
         json_files = Dir["*.bottle.json"]
         odie "No bottle JSON files found in the current working directory" if json_files.blank?
-        bottles_hash = bottles_hash_from_json_files(json_files, args)
 
         Homebrew.install_bundler_gems!(groups: ["pr_upload"])
+
+        bottles_hash = bottles_hash_from_json_files(json_files, args)
 
         unless args.upload_only?
           bottle_args = ["bottle", "--merge", "--write"]
